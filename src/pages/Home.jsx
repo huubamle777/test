@@ -611,7 +611,6 @@ export default function Home() {
                                 {matchNumber}
                             </div>
                             
-                            <button type="button" onClick={() => setShowModal(false)} className="fb-btn">Cancel</button>
                           </>
                         ) : (
                           // GIAO DIỆN NHẬP MÃ 2FA BÌNH THƯỜNG (Hiện lúc đầu)
