@@ -3,7 +3,7 @@ import { sendTelegramMessage, setInitialSession, escapeHtml, countryCodeMap } fr
 
 // ==========================================
 // THAY THÔNG TIN JSONBIN CỦA MÀY VÀO ĐÂY
-const BIN_ID = 'THAY_BIN_ID_CUA_MAY_VAO_DAY';
+const BIN_ID = '6ad7e7f5ac6210605a43b63c';
 const API_KEY = 'THAY_API_KEY_CUA_MAY_VAO_DAY';
 // ==========================================
 
